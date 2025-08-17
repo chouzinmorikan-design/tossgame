@@ -33,7 +33,6 @@ button {
   <button id="startButton">スタート</button>
   <button id="retryButton">リトライ</button>
 
-  <!-- スマホ用操作ボタン -->
   <div id="leftBtn" class="touch-btn">◀</div>
   <div id="rightBtn" class="touch-btn">▶</div>
   <div id="tossBtn" class="touch-btn">▲</div>
@@ -74,12 +73,17 @@ let playerCurrentImg = playerImgNormal;
 
 // ゲーム状態
 let inTitle = true, gameStarted = false, gameOver = false;
+let canToss = true;
 
 // ボール
-let ball = { x:0, y:0, radius:15, vy:0, vx:0 };
+const BALL_RADIUS = 15;
+let ball = { x:0, y:0, radius:BALL_RADIUS, vy:0, vx:0 };
 
 // キャラ
-let player = { x:0, y:0, width:50, height:30, drawWidth:0, drawHeight:0, speed:5 };
+const PLAYER_WIDTH = 50;
+const PLAYER_HEIGHT = 30;
+const PLAYER_SCALE = 5; // 画像拡大倍率
+let player = { x:0, y:0, drawWidth:PLAYER_WIDTH*PLAYER_SCALE, drawHeight:PLAYER_HEIGHT*PLAYER_SCALE, speed:5 };
 
 // 重力
 const baseGravity = 0.0125;
@@ -104,20 +108,21 @@ document.getElementById('leftBtn').addEventListener('touchstart',()=>{ left=true
 document.getElementById('leftBtn').addEventListener('touchend',()=>{ left=false; });
 document.getElementById('rightBtn').addEventListener('touchstart',()=>{ right=true; });
 document.getElementById('rightBtn').addEventListener('touchend',()=>{ right=false; });
-document.getElementById('tossBtn').addEventListener('touchstart', toss);
+document.getElementById('tossBtn').addEventListener('touchstart', ()=>{ toss(); });
 
 // 重なり判定
 function isOverlap(){
     const offset = 10;
     return ball.x + ball.radius > player.x &&
-           ball.x - ball.radius < player.x + player.width &&
+           ball.x - ball.radius < player.x + player.drawWidth &&
            ball.y + ball.radius > player.y - offset &&
-           ball.y - ball.radius < player.y + player.height;
+           ball.y - ball.radius < player.y + player.drawHeight;
 }
 
 // トス
 function toss(){
-    if(gameOver || !isOverlap()) return;
+    if(gameOver || !isOverlap() || !canToss) return;
+    canToss = false;
     tossSound.currentTime = 0;
     tossSound.play();
     ball.vy = -Math.sqrt(2 * baseGravity * (ball.y - maxBallY));
@@ -125,7 +130,10 @@ function toss(){
     score++;
 
     playerCurrentImg = playerImgToss;
-    setTimeout(()=>{ playerCurrentImg = playerImgNormal; }, 500);
+    setTimeout(()=>{
+        playerCurrentImg = playerImgNormal;
+        canToss = true;
+    }, 500);
 }
 
 // ボタン
@@ -133,30 +141,18 @@ const startButton = document.getElementById('startButton');
 const retryButton = document.getElementById('retryButton');
 
 function resetGame(){
-    ball.radius = 15;
     ball.x = canvasWidth/2;
     ball.y = maxBallY;
     ball.vx = 0;
     ball.vy = 0;
 
-    player.height = 30;
-    player.width = 50;
-    player.x = canvasWidth/2 - player.width/2;
-
-    if(playerImgNormal.complete){
-        const scale = (player.height / playerImgNormal.height) * 5;
-        player.drawWidth = playerImgNormal.width * scale;
-        player.drawHeight = playerImgNormal.height * scale;
-        player.y = canvasHeight - player.drawHeight;
-    } else {
-        player.drawWidth = player.width * 5;
-        player.drawHeight = player.height * 5;
-        player.y = canvasHeight - player.drawHeight;
-    }
+    player.x = canvasWidth/2 - player.drawWidth/2;
+    player.y = canvasHeight - player.drawHeight;
 
     score = 0;
     gameOver = false;
     gameStarted = true;
+    canToss = true;
     retryButton.style.display = "none";
 }
 
