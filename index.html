@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>トスゲーム</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+html, body { margin:0; padding:0; overflow:hidden; background:#222; display:flex; justify-content:center; align-items:center; height:100vh; }
+#gameContainer { position: relative; }
+canvas { display:block; background:#333; }
+button {
+  position:absolute;
+  border:none;
+  border-radius:10px;
+  background:#ff5722;
+  color:white;
+  font-size:20px;
+  z-index:10;
+  cursor:pointer;
+}
+#startButton { top:60%; left:50%; transform:translateX(-50%); padding:15px 30px; }
+#retryButton { top:65%; left:50%; transform:translateX(-50%); padding:15px 30px; display:none; }
+
+.touch-btn { position:absolute; bottom:10%; width:60px; height:60px; border-radius:30px; background:rgba(255,255,255,0.3); font-size:24px; color:white; text-align:center; line-height:60px; }
+#leftBtn { left:10%; }
+#rightBtn { right:10%; }
+#tossBtn { bottom:15%; left:50%; transform:translateX(-50%); width:80px; height:80px; border-radius:40px; line-height:80px; font-size:28px; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+  <button id="startButton">スタート</button>
+  <button id="retryButton">リトライ</button>
+
+  <!-- スマホ用操作ボタン -->
+  <div id="leftBtn" class="touch-btn">◀</div>
+  <div id="rightBtn" class="touch-btn">▶</div>
+  <div id="tossBtn" class="touch-btn">▲</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let canvasWidth, canvasHeight;
+function resizeCanvas() {
+    canvasWidth = window.innerWidth * 0.9;
+    canvasHeight = canvasWidth * 16 / 9;
+    if(canvasHeight > window.innerHeight * 0.9){
+        canvasHeight = window.innerHeight * 0.9;
+        canvasWidth = canvasHeight * 9 / 16;
+    }
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// 効果音・BGM
+const startSound = new Audio('start.wav');
+const retrySound = new Audio('retry.wav');
+const tossSound = new Audio('toss.wav');
+const gameOverSound = new Audio('gameover.wav');
+const bgm = new Audio('bgm.mp3');
+bgm.loop = true;
+
+// 画像
+const bgImg = new Image(); bgImg.src = 'background.png';
+const ballImg = new Image(); ballImg.src = 'ball.png';  
+const playerImgNormal = new Image(); playerImgNormal.src = 'player.png';  
+const playerImgToss = new Image(); playerImgToss.src = 'player_toss.png'; 
+let playerCurrentImg = playerImgNormal;
+
+// ゲーム状態
+let inTitle = true, gameStarted = false, gameOver = false;
+
+// ボール
+let ball = { x:0, y:0, radius:15, vy:0, vx:0 };
+
+// キャラ
+let player = { x:0, y:0, width:50, height:30, drawWidth:0, drawHeight:0, speed:5 };
+
+// 重力
+const baseGravity = 0.0125;
+const maxBallY = 50;
+
+// スコア
+let score = 0;
+
+// キー操作
+let left=false, right=false;
+document.addEventListener('keydown', e=>{
+    if(e.code==='ArrowLeft') left=true;
+    if(e.code==='ArrowRight') right=true;
+});
+document.addEventListener('keyup', e=>{
+    if(e.code==='ArrowLeft') left=false;
+    if(e.code==='ArrowRight') right=false;
+});
+
+// スマホボタン操作
+document.getElementById('leftBtn').addEventListener('touchstart',()=>{ left=true; });
+document.getElementById('leftBtn').addEventListener('touchend',()=>{ left=false; });
+document.getElementById('rightBtn').addEventListener('touchstart',()=>{ right=true; });
+document.getElementById('rightBtn').addEventListener('touchend',()=>{ right=false; });
+document.getElementById('tossBtn').addEventListener('touchstart', toss);
+
+// 重なり判定
+function isOverlap(){
+    const offset = 10;
+    return ball.x + ball.radius > player.x &&
+           ball.x - ball.radius < player.x + player.width &&
+           ball.y + ball.radius > player.y - offset &&
+           ball.y - ball.radius < player.y + player.height;
+}
+
+// トス
+function toss(){
+    if(gameOver || !isOverlap()) return;
+    tossSound.currentTime = 0;
+    tossSound.play();
+    ball.vy = -Math.sqrt(2 * baseGravity * (ball.y - maxBallY));
+    ball.vx = (Math.random()-0.5)*3;
+    score++;
+
+    playerCurrentImg = playerImgToss;
+    setTimeout(()=>{ playerCurrentImg = playerImgNormal; }, 500);
+}
+
+// ボタン
+const startButton = document.getElementById('startButton');
+const retryButton = document.getElementById('retryButton');
+
+function resetGame(){
+    ball.radius = 15;
+    ball.x = canvasWidth/2;
+    ball.y = maxBallY;
+    ball.vx = 0;
+    ball.vy = 0;
+
+    player.height = 30;
+    player.width = 50;
+    player.x = canvasWidth/2 - player.width/2;
+
+    if(playerImgNormal.complete){
+        const scale = (player.height / playerImgNormal.height) * 5;
+        player.drawWidth = playerImgNormal.width * scale;
+        player.drawHeight = playerImgNormal.height * scale;
+        player.y = canvasHeight - player.drawHeight;
+    } else {
+        player.drawWidth = player.width * 5;
+        player.drawHeight = player.height * 5;
+        player.y = canvasHeight - player.drawHeight;
+    }
+
+    score = 0;
+    gameOver = false;
+    gameStarted = true;
+    retryButton.style.display = "none";
+}
+
+// スタートボタン
+startButton.addEventListener('click', ()=>{
+    startSound.currentTime = 0;
+    startSound.play();
+    inTitle=false;
+    resetGame();
+    startButton.style.display="none";
+    bgm.currentTime = 0;
+    bgm.play();
+});
+
+// リトライボタン
+retryButton.addEventListener('click', ()=>{
+    retrySound.currentTime = 0;
+    retrySound.play();
+    resetGame();
+    bgm.currentTime = 0;
+    bgm.play();
+});
+
+// ゲームループ
+function update(){
+    if(!gameStarted) return;
+
+    if(!gameOver){
+        if(left) player.x -= player.speed;
+        if(right) player.x += player.speed;
+        player.x = Math.max(0, Math.min(canvasWidth - player.drawWidth, player.x));
+    }
+
+    const speedMultiplier = 1 + Math.floor(score/2) * 0.15;
+    ball.vy += baseGravity * speedMultiplier;
+    ball.y += ball.vy * speedMultiplier;
+    ball.x += ball.vx;
+
+    if(ball.x - ball.radius < 0){ ball.x = ball.radius; ball.vx*=-1; }
+    if(ball.x + ball.radius > canvasWidth){ ball.x = canvasWidth - ball.radius; ball.vx*=-1; }
+
+    if(ball.y + ball.radius > canvasHeight){
+        ball.y = canvasHeight - ball.radius;
+        if(!gameOver){
+            gameOver = true;
+            gameStarted = false;
+            retryButton.style.display = "block";
+            gameOverSound.currentTime = 0;
+            gameOverSound.play();
+            bgm.pause();
+        }
+        ball.vy *= -0.5;
+        ball.vx *= 0.98;
+    }
+}
+
+// 描画
+function draw(){
+    if(bgImg.complete){
+        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
+    } else {
+        ctx.fillStyle = "#333";
+        ctx.fillRect(0,0,canvasWidth,canvasHeight);
+    }
+
+    if(inTitle){
+        ctx.fillStyle="white";
+        ctx.font = canvasWidth*0.125+"px sans-serif";
+        ctx.textAlign="center";
+        ctx.fillText("トスゲーム", canvasWidth/2, canvasHeight/2 - 30);
+        ctx.font = canvasWidth*0.05+"px sans-serif";
+        ctx.fillText("スタートボタンを押して開始", canvasWidth/2, canvasHeight/2 + 10);
+        return;
+    }
+
+    if(ballImg.complete) {
+        ctx.drawImage(ballImg, ball.x - ball.radius, ball.y - ball.radius, ball.radius*2, ball.radius*2);
+    } else {
+        ctx.fillStyle="yellow";
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    if(playerCurrentImg.complete){
+        ctx.drawImage(playerCurrentImg, player.x, player.y, player.drawWidth, player.drawHeight);
+    } else {
+        ctx.fillStyle="lime";
+        ctx.fillRect(player.x, player.y, player.drawWidth, player.drawHeight);
+    }
+
+    ctx.fillStyle="white";
+    ctx.font = "20px sans-serif";
+    ctx.textAlign="left";
+    ctx.fillText("Score: "+score,10,30);
+
+    if(gameOver){
+        ctx.fillStyle="red";
+        ctx.font = "40px sans-serif";
+        ctx.textAlign="center";
+        ctx.fillText("ゲームオーバー", canvasWidth/2, canvasHeight/2 - 20);
+        ctx.font = "30px sans-serif";
+        ctx.fillText("スコア: "+score, canvasWidth/2, canvasHeight/2 + 20);
+    }
+}
+
+function loop(){
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+</body>
+</html>
